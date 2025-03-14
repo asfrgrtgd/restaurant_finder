@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>レストラン検索</title>
+  <!-- Tailwind CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+    rel="stylesheet"
+  />
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+  />
+  <!-- Font Awesome -->
+  <link
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    rel="stylesheet"
+  />
+
+  <style>
+    /* マップの高さ調整 */
+    #map {
+      height: 70vh;
+      transition: all 0.3s ease;
+    }
+    /* ローディングアニメーション */
+    .loading {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+    /* カードホバー */
+    .card {
+      transition: all 0.3s ease;
+      height: 100%;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    /* 現在地ボタンにパルスアニメーション */
+    .location-pulse {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+      }
+      70% {
+        box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+      }
+    }
+    /* ピンボタンのツールチップ */
+    .pin-tooltip {
+      pointer-events: none;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    #toggleClickMode:hover .pin-tooltip {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -2px);
+    }
+    /* クリックモードがアクティブの場合のアニメーション */
+    .click-mode-active {
+      animation: pulse-border 2s infinite;
+    }
+    @keyframes pulse-border {
+      0% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+      }
+    }
+    /* サークル表示 */
+    .leaflet-circle-radius {
+      stroke: #3b82f6;
+      stroke-width: 2;
+      fill: #3b82f6;
+      fill-opacity: 0.1;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- ナビゲーションバー -->
+  <nav class="bg-white shadow-lg fixed top-0 w-full z-50">
+    <div class="container mx-auto px-6 py-4">
+      <h1 class="text-3xl font-bold text-gray-800 flex items-center">
+        <i class="fas fa-utensils text-blue-500 mr-2"></i>
+        レストラン検索
+      </h1>
+    </div>
+  </nav>
+
+  <!-- コンテンツ -->
+  <div class="container mx-auto px-4 pt-20 pb-8">
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div class="p-6">
+        <div class="flex flex-wrap gap-4 justify-between items-center mb-6">
+          <!-- ボタン類 -->
+          <div class="flex gap-4">
+            <button
+              id="getCurrentLocation"
+              class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg flex items-center transition-all duration-300 location-pulse"
+            >
+              <i class="fas fa-location-dot mr-2"></i>
+              現在地を取得
+            </button>
+            <button
+              id="toggleClickMode"
+              class="relative bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg flex items-center transition-all duration-300"
+            >
+              <span class="flex items-center">
+                <i class="fas fa-map-pin mr-2"></i>
+                <span class="pin-text">ピンを追加</span>
+              </span>
+              <div
+                class="pin-tooltip opacity-0 invisible absolute left-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg transform -translate-x-1/2 transition-all duration-200 whitespace-nowrap z-50"
+              >
+                地図をクリックして検索位置を設定
+                <div
+                  class="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full"
+                >
+                  <div class="border-8 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <!-- 検索半径 -->
+          <div class="flex items-center gap-4">
+            <label class="text-gray-700 font-medium">検索半径:</label>
+            <select
+              id="searchRadius"
+              class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg py-2.5 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+            >
+              <option value="1000">1km</option>
+              <option value="1500" selected>1.5km</option>
+              <option value="2000">2km</option>
+              <option value="3000">3km</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- マップ -->
+      <div id="map" class="border-t border-b border-gray-200"></div>
+
+      <!-- ローディング指標 -->
+      <div id="loadingIndicator" class="hidden p-4">
+        <div class="flex justify-center items-center">
+          <div class="loading">
+            <i class="fas fa-circle-notch text-4xl text-blue-500"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 検索結果 -->
+    <div class="mt-8 mb-4">
+      <h2 class="text-2xl font-semibold text-gray-800 mb-2">検索結果</h2>
+      <p id="resultCount" class="text-gray-600"></p>
+    </div>
+
+    <div id="restaurantList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- レストラン情報がここに動的に追加されます -->
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+  <script>
+    let map;
+    let currentMarker;
+    let restaurantMarkers = [];
+    let currentPosition = { lat: 35.607, lng: 140.106 }; // デフォルト位置: 千葉市
+    let isClickMode = false;
+    let radiusCircle;
+
+    // 地図の初期化
+    function initMap() {
+      map = L.map("map").setView([currentPosition.lat, currentPosition.lng], 15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      // マップクリック時、クリックモードが有効なら現在位置更新
+      map.on("click", (e) => {
+        if (isClickMode) {
+          currentPosition = {
+            lat: e.latlng.lat,
+            lng: e.latlng.lng,
+          };
+          updateCurrentLocationMarker();
+          searchRestaurants();
+        }
+      });
+
+      updateCurrentLocationMarker();
+    }
+
+    // 現在位置マーカーの更新
+    function updateCurrentLocationMarker() {
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+      }
+
+      const customIcon = L.icon({
+        iconUrl:
+          "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+        shadowUrl:
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+
+      currentMarker = L.marker([currentPosition.lat, currentPosition.lng], {
+        icon: customIcon,
+        title: "選択位置",
+      }).addTo(map);
+
+      updateRadiusCircle();
+    }
+
+    // 検索半径の円を更新
+    function updateRadiusCircle() {
+      if (radiusCircle) {
+        map.removeLayer(radiusCircle);
+      }
+
+      const radius = parseInt(document.getElementById("searchRadius").value);
+      radiusCircle = L.circle([currentPosition.lat, currentPosition.lng], {
+        radius: radius,
+        className: "leaflet-circle-radius",
+      }).addTo(map);
+
+      // 円の範囲にあわせてマップを移動
+      const bounds = radiusCircle.getBounds();
+      map.fitBounds(bounds);
+    }
+
+    // レストランマーカーの更新
+    function updateRestaurantMarkers(restaurants) {
+      // 既存マーカーを除去
+      restaurantMarkers.forEach((marker) => map.removeLayer(marker));
+      restaurantMarkers = [];
+
+      const restaurantIcon = L.icon({
+        iconUrl:
+          "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+        shadowUrl:
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+
+      restaurants.forEach((restaurant) => {
+        const marker = L.marker(
+          [restaurant.location.lat, restaurant.location.lng],
+          {
+            icon: restaurantIcon,
+            title: restaurant.name,
+          }
+        ).addTo(map);
+
+        marker.bindPopup(`
+          <div class="p-2">
+            <h3 class="font-bold text-lg mb-1">${restaurant.name}</h3>
+            <p class="text-gray-600">${restaurant.vicinity}</p>
+            <div class="flex items-center mt-2">
+              <span class="text-yellow-500 mr-1">★</span>
+              <span>${restaurant.rating}</span>
+              <span class="ml-2 text-blue-500">${restaurant.distance}m</span>
+            </div>
+          </div>
+        `);
+
+        restaurantMarkers.push(marker);
+      });
+    }
+
+    // レストラン情報の表示
+    function displayRestaurants(restaurants) {
+      const container = document.getElementById("restaurantList");
+      const resultCount = document.getElementById("resultCount");
+      container.innerHTML = "";
+
+      if (!restaurants || restaurants.length === 0) {
+        resultCount.textContent = "この範囲にレストランは見つかりませんでした";
+        // レストランがない場合のメッセージ
+        const noResultsMessage = document.createElement("div");
+        noResultsMessage.className = "text-center p-8 bg-gray-50 rounded-xl shadow-sm";
+        noResultsMessage.innerHTML = `
+          <i class="fas fa-search text-4xl text-gray-400 mb-4"></i>
+          <p class="text-gray-600">検索範囲を広げてみてください</p>
+        `;
+        container.appendChild(noResultsMessage);
+        return;
+      }
+
+      resultCount.textContent = `${restaurants.length}件のレストランが見つかりました`;
+
+      restaurants.forEach((restaurant) => {
+        const card = document.createElement("div");
+        card.className = "card bg-white rounded-xl shadow-lg overflow-hidden";
+
+        // 星の数を生成
+        // 例: 評価3.7 → ★★★★(3+0.7→半分)
+        const fullStars = Math.floor(restaurant.rating);
+        const halfStar = restaurant.rating - fullStars >= 0.5;
+        const starsHTML = Array(fullStars)
+          .fill()
+          .map(() => '<i class="fas fa-star text-yellow-400"></i>')
+          .join("");
+        const halfStarHTML = halfStar
+          ? '<i class="fas fa-star-half-alt text-yellow-400"></i>'
+          : "";
+
+        // rating が 0 の場合は「評価なし」にする例
+        const ratingDisplay = restaurant.rating > 0
+          ? `${starsHTML}${halfStarHTML} <span class="ml-2 text-gray-600">${restaurant.rating}</span>`
+          : '評価なし';
+
+        card.innerHTML = `
+          <div class="p-6">
+            <div class="flex justify-between items-start mb-4">
+              <h3 class="text-xl font-semibold text-gray-800 flex-1">${restaurant.name}</h3>
+              <span class="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+                ${restaurant.distance}m
+              </span>
+            </div>
+            <p class="text-gray-600 mb-4 flex items-start">
+              <i class="fas fa-location-dot text-gray-400 mr-2 mt-1"></i>
+              <span>${restaurant.vicinity}</span>
+            </p>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center">
+                ${ratingDisplay}
+              </div>
+              <button
+                onclick="map.setView([${restaurant.location.lat}, ${restaurant.location.lng}], 18)"
+                class="text-blue-500 hover:text-blue-600 transition-colors duration-200"
+              >
+                <i class="fas fa-map-marked-alt"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // レストランの検索
+    async function searchRestaurants() {
+      const loadingIndicator = document.getElementById("loadingIndicator");
+      loadingIndicator.classList.remove("hidden");
+
+      try {
+        const radius = document.getElementById("searchRadius").value;
+        const response = await fetch("/search_restaurants", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            lat: currentPosition.lat,
+            lng: currentPosition.lng,
+            radius: radius,
+          }),
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          showError(data.error);
+          return;
+        }
+
+        displayRestaurants(data.restaurants || []);
+        updateRestaurantMarkers(data.restaurants || []);
+        updateRadiusCircle();
+      } catch (error) {
+        console.error("Error:", error);
+        showError("予期せぬエラーが発生しました");
+      } finally {
+        loadingIndicator.classList.add("hidden");
+      }
+    }
+
+    // エラー表示
+    function showError(message) {
+      const container = document.getElementById("restaurantList");
+      const resultCount = document.getElementById("resultCount");
+      container.innerHTML = "";
+      resultCount.textContent = "エラーが発生しました";
+
+      const errorMessage = document.createElement("div");
+      errorMessage.className = "text-center p-8 bg-red-50 rounded-xl shadow-sm";
+      errorMessage.innerHTML = `
+        <i class="fas fa-exclamation-circle text-4xl text-red-400 mb-4"></i>
+        <p class="text-red-600">${message}</p>
+        <p class="text-gray-600 mt-2">検索半径を調整してもう一度お試しください</p>
+      `;
+      container.appendChild(errorMessage);
+    }
+
+    // 現在地の取得
+    document
+      .getElementById("getCurrentLocation")
+      .addEventListener("click", async () => {
+        try {
+          const response = await fetch("/get_current_location");
+          const data = await response.json();
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          currentPosition = {
+            lat: data.location.lat,
+            lng: data.location.lng,
+          };
+
+          updateCurrentLocationMarker();
+          searchRestaurants();
+        } catch (error) {
+          console.error("Error:", error);
+          alert("現在地の取得に失敗しました: " + error.message);
+        }
+      });
+
+    // クリックモードの切り替え
+    document.getElementById("toggleClickMode").addEventListener("click", () => {
+      isClickMode = !isClickMode;
+      const button = document.getElementById("toggleClickMode");
+      const pinText = button.querySelector(".pin-text");
+      const tooltip = button.querySelector(".pin-tooltip");
+
+      if (isClickMode) {
+        // アクティブモード
+        button.classList.remove("bg-green-500", "hover:bg-green-600");
+        button.classList.add("bg-yellow-500", "hover:bg-yellow-600", "click-mode-active");
+        pinText.textContent = "クリックモード終了";
+        button.querySelector("i").className = "fas fa-times mr-2";
+        map.getContainer().style.cursor = "crosshair";
+
+        // モバイル向けツールチップ表示
+        if (window.innerWidth <= 768) {
+          tooltip.style.opacity = "1";
+          tooltip.style.visibility = "visible";
+          setTimeout(() => {
+            tooltip.style.opacity = "0";
+            tooltip.style.visibility = "hidden";
+          }, 3000);
+        }
+      } else {
+        // 通常モード
+        button.classList.remove("bg-yellow-500", "hover:bg-yellow-600", "click-mode-active");
+        button.classList.add("bg-green-500", "hover:bg-green-600");
+        pinText.textContent = "ピンを追加";
+        button.querySelector("i").className = "fas fa-map-pin mr-2";
+        map.getContainer().style.cursor = "";
+      }
+    });
+
+    // 検索半径変更時の処理
+    document.getElementById("searchRadius").addEventListener("change", () => {
+      updateRadiusCircle();
+      searchRestaurants();
+    });
+
+    // ページ読み込み時にマップ初期化 & 初回検索
+    initMap();
+    searchRestaurants();
+  </script>
+</body>
+</html>
