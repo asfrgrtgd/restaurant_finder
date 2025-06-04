@@ -23,7 +23,7 @@
   <style>
     /* マップの高さ調整 */
     #map {
-      height: 70vh;
+      height: 80vh;
       transition: all 0.3s ease;
     }
     /* ローディングアニメーション */
@@ -97,7 +97,7 @@
     }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100 min-h-screen text-base md:text-lg">
   <!-- ナビゲーションバー -->
   <nav class="bg-white shadow-lg fixed top-0 w-full z-50">
     <div class="container mx-auto px-6 py-4">
@@ -145,7 +145,7 @@
 
           <!-- 検索半径 -->
           <div class="flex items-center gap-4">
-            <label class="text-gray-700 font-medium">検索半径:</label>
+            <label class="text-gray-700 font-medium text-lg">検索半径:</label>
             <select
               id="searchRadius"
               class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg py-2.5 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
@@ -286,7 +286,7 @@
 
         marker.bindPopup(`
           <div class="p-2">
-            <h3 class="font-bold text-lg mb-1">${restaurant.name}</h3>
+            <h3 class="font-bold text-xl mb-1">${restaurant.name}</h3>
             <p class="text-gray-600">${restaurant.vicinity}</p>
             <div class="flex items-center mt-2">
               <span class="text-yellow-500 mr-1">★</span>
@@ -331,21 +331,21 @@
         const halfStar = restaurant.rating - fullStars >= 0.5;
         const starsHTML = Array(fullStars)
           .fill()
-          .map(() => '<i class="fas fa-star text-yellow-400"></i>')
+          .map(() => '<i class="fas fa-star text-yellow-400 text-xl"></i>')
           .join("");
         const halfStarHTML = halfStar
-          ? '<i class="fas fa-star-half-alt text-yellow-400"></i>'
+          ? '<i class="fas fa-star-half-alt text-yellow-400 text-xl"></i>'
           : "";
 
         // rating が 0 の場合は「評価なし」にする例
         const ratingDisplay = restaurant.rating > 0
-          ? `${starsHTML}${halfStarHTML} <span class="ml-2 text-gray-600">${restaurant.rating}</span>`
+          ? `${starsHTML}${halfStarHTML} <span class="ml-2 text-gray-600 text-lg">${restaurant.rating}</span>`
           : '評価なし';
 
         card.innerHTML = `
           <div class="p-6">
             <div class="flex justify-between items-start mb-4">
-              <h3 class="text-xl font-semibold text-gray-800 flex-1">${restaurant.name}</h3>
+              <h3 class="text-2xl font-semibold text-gray-800 flex-1">${restaurant.name}</h3>
               <span class="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
                 ${restaurant.distance}m
               </span>
