@@ -39,3 +39,14 @@ python app.py
 http://localhost:5000
 ```
 
+## テスト実行方法
+1. pytest をインストール
+```
+pip install pytest
+```
+
+2. テストを実行
+```
+pytest
+```
+
